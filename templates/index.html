@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disaster Plan Best Practices Analyzer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .upload-section {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="file"],
+        select {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .search-section {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .search-section .form-group {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .results {
+            margin-top: 20px;
+        }
+
+        .practice-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .practice-text {
+            font-size: 1.05em;
+            color: #333;
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+
+        .practice-meta {
+            font-size: 0.9em;
+            color: #666;
+            font-style: italic;
+        }
+
+        .status-message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .status-message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status-message.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        .plans-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .plan-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .plan-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .plan-card p {
+            margin: 5px 0;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .search-section {
+                flex-direction: column;
+            }
+
+            .card {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚨 Disaster Plan Analyzer</h1>
+            <p class="subtitle">Upload local government disaster plans and discover best practices</p>
+        </header>
+
+        <!-- Upload Section -->
+        <div class="card">
+            <h2>📤 Upload Disaster Plan</h2>
+            <div id="uploadStatus" class="status-message"></div>
+            <form id="uploadForm" class="upload-section">
+                <div class="form-group">
+                    <label for="governmentName">Government/Organization Name:</label>
+                    <input type="text" id="governmentName" name="government_name" 
+                           placeholder="e.g., City of Springfield" required>
+                </div>
+                <div class="form-group">
+                    <label for="fileInput">Disaster Plan Document (PDF, TXT, or DOCX):</label>
+                    <input type="file" id="fileInput" name="file" 
+                           accept=".pdf,.txt,.docx" required>
+                </div>
+                <button type="submit" id="uploadBtn">Upload Document</button>
+            </form>
+        </div>
+
+        <!-- Search Section -->
+        <div class="card">
+            <h2>🔍 Search Best Practices</h2>
+            <div id="searchStatus" class="status-message"></div>
+            <div class="search-section">
+                <div class="form-group">
+                    <label for="disasterType">Disaster Type:</label>
+                    <select id="disasterType" required>
+                        <option value="">Select a disaster type...</option>
+                        <option value="fire">🔥 Fire</option>
+                        <option value="flood">🌊 Flood</option>
+                        <option value="hurricane">🌀 Hurricane</option>
+                        <option value="earthquake">⚡ Earthquake</option>
+                        <option value="tornado">🌪️ Tornado</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="keyword">Keyword (optional):</label>
+                    <input type="text" id="keyword" placeholder="e.g., evacuation, shelter">
+                </div>
+            </div>
+            <button onclick="searchBestPractices()" id="searchBtn" style="margin-top: 15px;">
+                Search Best Practices
+            </button>
+
+            <div id="results" class="results"></div>
+        </div>
+
+        <!-- Uploaded Plans Section -->
+        <div class="card">
+            <h2>📚 Uploaded Plans</h2>
+            <button onclick="loadPlans()" style="margin-bottom: 15px;">Refresh Plans</button>
+            <div id="plansList" class="plans-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // Upload form handler
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const uploadBtn = document.getElementById('uploadBtn');
+            const statusDiv = document.getElementById('uploadStatus');
+            
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading...';
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus('uploadStatus', 'success', 
+                        `✓ ${result.message} (Extracted ${result.text_length} characters)`);
+                    e.target.reset();
+                    loadPlans(); // Refresh plans list
+                } else {
+                    showStatus('uploadStatus', 'error', `✗ ${result.error}`);
+                }
+            } catch (error) {
+                showStatus('uploadStatus', 'error', `✗ Upload failed: ${error.message}`);
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'Upload Document';
+            }
+        });
+
+        // Search best practices
+        async function searchBestPractices() {
+            const disasterType = document.getElementById('disasterType').value;
+            const keyword = document.getElementById('keyword').value;
+            const resultsDiv = document.getElementById('results');
+            const searchBtn = document.getElementById('searchBtn');
+            const statusDiv = document.getElementById('searchStatus');
+            
+            if (!disasterType) {
+                showStatus('searchStatus', 'error', '✗ Please select a disaster type');
+                return;
+            }
+            
+            searchBtn.disabled = true;
+            searchBtn.textContent = 'Searching...';
+            resultsDiv.innerHTML = '<div class="loading">🔍 Searching for best practices...</div>';
+            
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        disaster_type: disasterType,
+                        keyword: keyword
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayResults(data);
+                    showStatus('searchStatus', 'success', 
+                        `✓ Found ${data.total_count} best practices`);
+                } else {
+                    showStatus('searchStatus', 'error', `✗ ${data.error}`);
+                    resultsDiv.innerHTML = '';
+                }
+            } catch (error) {
+                showStatus('searchStatus', 'error', `✗ Search failed: ${error.message}`);
+                resultsDiv.innerHTML = '';
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.textContent = 'Search Best Practices';
+            }
+        }
+
+        // Display search results
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (data.practices.length === 0) {
+                resultsDiv.innerHTML = `
+                    <div class="no-results">
+                        No best practices found for "${data.disaster_type}".
+                        ${data.keyword ? `with keyword "${data.keyword}"` : ''}
+                        <br><br>
+                        Try uploading more disaster plans or searching with different criteria.
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = `<h3 style="margin-bottom: 15px; color: #667eea;">
+                Best Practices for ${capitalizeFirst(data.disaster_type)} 
+                ${data.keyword ? `(filtered by "${data.keyword}")` : ''}:
+            </h3>`;
+            
+            data.practices.forEach((item, index) => {
+                html += `
+                    <div class="practice-item">
+                        <div class="practice-text">${index + 1}. ${escapeHtml(item.practice)}</div>
+                        <div class="practice-meta">
+                            Source: ${escapeHtml(item.source)} - ${escapeHtml(item.filename)}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            resultsDiv.innerHTML = html;
+        }
+
+        // Load uploaded plans
+        async function loadPlans() {
+            const plansDiv = document.getElementById('plansList');
+            plansDiv.innerHTML = '<div class="loading">Loading plans...</div>';
+            
+            try {
+                const response = await fetch('/api/plans');
+                const data = await response.json();
+                
+                if (data.plans.length === 0) {
+                    plansDiv.innerHTML = '<div class="no-results">No plans uploaded yet. Upload your first disaster plan above!</div>';
+                    return;
+                }
+                
+                let html = '';
+                data.plans.forEach(plan => {
+                    html += `
+                        <div class="plan-card">
+                            <h3>${escapeHtml(plan.government_name)}</h3>
+                            <p><strong>File:</strong> ${escapeHtml(plan.original_filename)}</p>
+                            <p><strong>Uploaded:</strong> ${formatDate(plan.upload_date)}</p>
+                            <p><strong>Size:</strong> ${plan.text_length.toLocaleString()} characters</p>
+                        </div>
+                    `;
+                });
+                
+                plansDiv.innerHTML = html;
+            } catch (error) {
+                plansDiv.innerHTML = `<div class="no-results">Error loading plans: ${error.message}</div>`;
+            }
+        }
+
+        // Helper functions
+        function showStatus(elementId, type, message) {
+            const statusDiv = document.getElementById(elementId);
+            statusDiv.className = `status-message ${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        function capitalizeFirst(str) {
+            return str.charAt(0).toUpperCase() + str.slice(1);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatDate(dateStr) {
+            // Format: YYYYMMDD_HHMMSS
+            const year = dateStr.substring(0, 4);
+            const month = dateStr.substring(4, 6);
+            const day = dateStr.substring(6, 8);
+            const hour = dateStr.substring(9, 11);
+            const minute = dateStr.substring(11, 13);
+            
+            return `${year}-${month}-${day} ${hour}:${minute}`;
+        }
+
+        // Load plans on page load
+        window.addEventListener('load', () => {
+            loadPlans();
+        });
+    </script>
+</body>
+</html>
