@@ -25,6 +25,11 @@ Follow these steps to set up and run the Disaster Plan Best Practices Analyzer:
    ```bash
    python app.py
    ```
+   
+   For development with debug mode:
+   ```bash
+   FLASK_DEBUG=true python app.py
+   ```
 
 5. **Open your browser** and navigate to:
    ```
