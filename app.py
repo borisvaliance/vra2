@@ -1,260 +1,106 @@
 import os
-import json
-from datetime import datetime
-from flask import Flask, render_template, request, jsonify, send_from_directory
-from werkzeug.utils import secure_filename
-import PyPDF2
-import docx
-from typing import List, Dict
+import math
+import random
+from typing import Dict, Any
 
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'txt', 'docx'}
+# --- UI ---
+import streamlit as st
 
-# Ensure upload directory exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+# --- Optional backend ---
+from flask import Flask, jsonify, request
 
-# Simple in-memory database for disaster plans
-disaster_plans_db = []
+# =========================================
+# CONFIG
+# =========================================
+RUN_MODE = os.getenv("RUN_MODE", "streamlit")   # "streamlit" (default) or "flask"
+PORT = int(os.getenv("PORT", "5000"))           # Flask port (local only)
+API_BASE_URL = os.getenv("API_BASE_URL")        # e.g., "https://your-api.example.com"
+TIMEOUT_SECS = 30
 
+# =========================================
+# SIMPLE PREDICTORS (placeholder logic)
+# Replace with real model loads and inference
+# =========================================
+def _sigmoid(x: float) -> float:
+    return 1 / (1 + math.exp(-x))
 
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+def predict_cause(features: Dict[str, Any]) -> Dict[str, Any]:
+    # Dummy scoring: deterministic-ish using simple hashing
+    score = (hash(str(features)) % 100) / 100
+    classes = ["Electrical", "Cooking", "Arson", "Wildfire", "Unknown"]
+    pred = classes[int(score * len(classes)) % len(classes)]
+    conf = 0.6 + 0.4 * _sigmoid(score * 3 - 1.5)
+    return {"prediction": pred, "confidence": round(conf, 3)}
 
+def predict_loss_severity(features: Dict[str, Any]) -> Dict[str, Any]:
+    base = (hash("loss"+str(features)) % 100) / 100
+    buckets = ["Low", "Moderate", "High", "Severe", "Catastrophic"]
+    pred = buckets[int(base * len(buckets)) % len(buckets)]
+    conf = 0.55 + 0.45 * _sigmoid(base * 4 - 2)
+    return {"prediction": pred, "confidence": round(conf, 3)}
 
-def extract_text_from_pdf(file_path):
-    """Extract text from PDF file"""
-    text = ""
-    try:
-        with open(file_path, 'rb') as file:
-            pdf_reader = PyPDF2.PdfReader(file)
-            for page in pdf_reader.pages:
-                text += page.extract_text() + "\n"
-    except Exception as e:
-        print(f"Error reading PDF: {e}")
-    return text
+def predict_response_risk(features: Dict[str, Any]) -> Dict[str, Any]:
+    base = (hash("resp"+str(features)) % 100) / 100
+    pred = "Elevated" if base > 0.5 else "Normal"
+    conf = 0.5 + 0.5 * _sigmoid((base - 0.5) * 6)
+    return {"prediction": pred, "confidence": round(conf, 3)}
 
+# =========================================
+# FLASK BACKEND (runs only when RUN_MODE=flask)
+# =========================================
+flask_app = Flask(__name__)
 
-def extract_text_from_docx(file_path):
-    """Extract text from DOCX file"""
-    try:
-        doc = docx.Document(file_path)
-        text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
-        return text
-    except Exception as e:
-        print(f"Error reading DOCX: {e}")
-        return ""
+@flask_app.route("/predict/cause", methods=["POST"])
+def route_cause():
+    data = request.get_json(force=True) or {}
+    return jsonify(predict_cause(data))
 
+@flask_app.route("/predict/loss_severity", methods=["POST"])
+def route_loss():
+    data = request.get_json(force=True) or {}
+    return jsonify(predict_loss_severity(data))
 
-def extract_text_from_txt(file_path):
-    """Extract text from TXT file"""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as file:
-            return file.read()
-    except Exception as e:
-        print(f"Error reading TXT: {e}")
-        return ""
+@flask_app.route("/predict/response_risk", methods=["POST"])
+def route_resp():
+    data = request.get_json(force=True) or {}
+    return jsonify(predict_response_risk(data))
 
+# =========================================
+# STREAMLIT FRONTEND (default)
+# =========================================
+def run_streamlit():
+    import requests
 
-def extract_text_from_file(file_path):
-    """Extract text from various file formats"""
-    extension = file_path.rsplit('.', 1)[1].lower()
-    
-    if extension == 'pdf':
-        return extract_text_from_pdf(file_path)
-    elif extension == 'docx':
-        return extract_text_from_docx(file_path)
-    elif extension == 'txt':
-        return extract_text_from_txt(file_path)
-    else:
-        return ""
+    st.set_page_config(page_title="NFIRS AI Analytics", layout="wide")
+    st.title("🔥 NFIRS AI Analytics")
 
+    with st.sidebar:
+        st.header("Inputs")
+        incident_type = st.selectbox("Incident Type", ["Fire", "Rescue", "Hazmat", "Medical"])
+        structure_type = st.selectbox("Structure Type", ["Residential", "Commercial", "Industrial", "Wildland"])
+        occupancy = st.selectbox("Occupancy", ["Single-family", "Multi-family", "Warehouse", "Office", "Open space"])
+        weather_severity = st.slider("Weather Severity (0–10)", 0, 10, 4)
+        alarm_hour = st.slider("Alarm Hour (0–23)", 0, 23, 15)
+        units_responding = st.number_input("Units Responding", min_value=1, max_value=50, value=3, step=1)
+        sqft = st.number_input("Structure Sq Ft", min_value=0, max_value=100000, value=1800, step=100)
+        st.divider()
+        st.caption("Tip: set API_BASE_URL in Secrets to call your deployed API.")
 
-def extract_best_practices(text, disaster_type):
-    """Extract best practices from disaster plan text for specific disaster type
-    
-    This is a simple keyword-based extraction. In production, you'd use NLP/AI.
-    """
-    disaster_type = disaster_type.lower()
-    text_lower = text.lower()
-    
-    practices = []
-    
-    # Split text into sentences
-    sentences = text.replace('\n', ' ').split('.')
-    
-    # Keywords for different disaster types
-    keywords = {
-        'fire': ['fire', 'smoke', 'evacuation', 'fire drill', 'fire extinguisher', 'sprinkler', 'flame', 'burning'],
-        'flood': ['flood', 'water', 'drainage', 'sandbag', 'evacuation', 'water level', 'flood plain', 'inundation'],
-        'hurricane': ['hurricane', 'storm', 'wind', 'evacuation', 'shelter', 'emergency supplies', 'tropical storm', 'cyclone'],
-        'earthquake': ['earthquake', 'seismic', 'structure', 'drop cover hold', 'building safety', 'aftershock'],
-        'tornado': ['tornado', 'shelter', 'basement', 'warning', 'funnel cloud', 'severe weather'],
+    features = {
+        "incident_type": incident_type,
+        "structure_type": structure_type,
+        "occupancy": occupancy,
+        "weather_severity": int(weather_severity),
+        "alarm_hour": int(alarm_hour),
+        "units_responding": int(units_responding),
+        "structure_sqft": int(sqft),
     }
-    
-    # Action keywords that indicate best practices
-    action_keywords = ['should', 'must', 'ensure', 'implement', 'establish', 'maintain', 
-                      'procedure', 'protocol', 'recommendation', 'guideline', 'practice',
-                      'plan', 'prepare', 'response', 'evacuate', 'shelter']
-    
-    disaster_keywords = keywords.get(disaster_type, [])
-    
-    for sentence in sentences:
-        sentence_lower = sentence.lower().strip()
-        
-        # Check if sentence contains disaster-specific keywords and action keywords
-        has_disaster_keyword = any(keyword in sentence_lower for keyword in disaster_keywords)
-        has_action_keyword = any(keyword in sentence_lower for keyword in action_keywords)
-        
-        if has_disaster_keyword and has_action_keyword and len(sentence.strip()) > 20:
-            practices.append(sentence.strip())
-    
-    # Remove duplicates while preserving order
-    seen = set()
-    unique_practices = []
-    for practice in practices:
-        if practice.lower() not in seen:
-            seen.add(practice.lower())
-            unique_practices.append(practice)
-    
-    return unique_practices[:10]  # Return top 10 practices
 
+    tabs = st.tabs(["Cause", "Loss Severity", "Response Risk"])
 
-@app.route('/')
-def index():
-    """Render main page"""
-    return render_template('index.html')
-
-
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    """Handle file upload"""
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    
-    file = request.files['file']
-    government_name = request.form.get('government_name', 'Unknown')
-    
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-    
-    if file and allowed_file(file.filename):
-        filename = secure_filename(file.filename)
-        # Add timestamp to avoid name conflicts
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"{timestamp}_{filename}"
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        
-        file.save(file_path)
-        
-        # Extract text from file
-        text = extract_text_from_file(file_path)
-        
-        # Store in database
-        plan_entry = {
-            'id': len(disaster_plans_db) + 1,
-            'filename': filename,
-            'original_filename': file.filename,
-            'government_name': government_name,
-            'upload_date': timestamp,
-            'file_path': file_path,
-            'text': text,
-            'text_length': len(text)
-        }
-        
-        disaster_plans_db.append(plan_entry)
-        
-        return jsonify({
-            'success': True,
-            'message': 'File uploaded successfully',
-            'plan_id': plan_entry['id'],
-            'text_length': len(text)
-        }), 200
-    
-    return jsonify({'error': 'Invalid file type. Allowed: PDF, TXT, DOCX'}), 400
-
-
-@app.route('/api/plans', methods=['GET'])
-def get_plans():
-    """Get list of all uploaded disaster plans"""
-    plans_summary = [
-        {
-            'id': plan['id'],
-            'government_name': plan['government_name'],
-            'original_filename': plan['original_filename'],
-            'upload_date': plan['upload_date'],
-            'text_length': plan['text_length']
-        }
-        for plan in disaster_plans_db
-    ]
-    
-    return jsonify({'plans': plans_summary}), 200
-
-
-@app.route('/api/best-practices/<disaster_type>', methods=['GET'])
-def get_best_practices(disaster_type):
-    """Get best practices for a specific disaster type from all uploaded plans"""
-    all_practices = []
-    
-    for plan in disaster_plans_db:
-        practices = extract_best_practices(plan['text'], disaster_type)
-        
-        for practice in practices:
-            all_practices.append({
-                'practice': practice,
-                'source': plan['government_name'],
-                'filename': plan['original_filename'],
-                'plan_id': plan['id']
-            })
-    
-    return jsonify({
-        'disaster_type': disaster_type,
-        'practices': all_practices,
-        'total_count': len(all_practices)
-    }), 200
-
-
-@app.route('/api/search', methods=['POST'])
-def search_practices():
-    """Search for best practices based on disaster type and optional keyword"""
-    data = request.get_json()
-    disaster_type = data.get('disaster_type', '').lower()
-    keyword = data.get('keyword', '').lower()
-    
-    if not disaster_type:
-        return jsonify({'error': 'Disaster type is required'}), 400
-    
-    all_practices = []
-    
-    for plan in disaster_plans_db:
-        practices = extract_best_practices(plan['text'], disaster_type)
-        
-        for practice in practices:
-            # Filter by keyword if provided
-            if keyword and keyword not in practice.lower():
-                continue
-                
-            all_practices.append({
-                'practice': practice,
-                'source': plan['government_name'],
-                'filename': plan['original_filename'],
-                'plan_id': plan['id']
-            })
-    
-    return jsonify({
-        'disaster_type': disaster_type,
-        'keyword': keyword,
-        'practices': all_practices,
-        'total_count': len(all_practices)
-    }), 200
-
-
-if __name__ == '__main__':
-    # Debug mode should only be enabled in development
-    # Set to False in production or use environment variable
-    import os
-    debug_mode = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
+    def call_or_local(endpoint: str, payload: dict, fallback_fn):
+        """If API_BASE_URL is set, call it; else run local function."""
+        if API_BASE_URL:
+            try:
+                url = f"{API_BASE_URL.rstrip('/')}{endpoint}"
+                r = requests.post
